@@ -15,5 +15,13 @@
   "license": "ISC",
   "devDependencies": {
     "lite-server": "^2.5.4"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CarlosSuarezJS20/typescript-practice-project.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CarlosSuarezJS20/typescript-practice-project/issues"
+  },
+  "homepage": "https://github.com/CarlosSuarezJS20/typescript-practice-project#readme"
 }
