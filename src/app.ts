@@ -1,3 +1,62 @@
+// project Type
+
+enum ProjectStatus {
+  Active,
+  Finished,
+}
+
+class Project {
+  constructor(
+    public id: string,
+    public t: string,
+    public desc: string,
+    public people: number,
+    public projectStatus: ProjectStatus
+  ) {}
+}
+
+type Listener = (items: Project[]) => void; // no matter what returns
+
+// Project State Management class
+
+class ProjectState {
+  private listeners: Listener[] = [];
+  private projects: Project[] = [];
+  private static instance: ProjectState;
+
+  private constructor() {}
+
+  static getInstance() {
+    if (this.instance) {
+      return this.instance;
+    }
+    this.instance = new ProjectState();
+    return this.instance;
+  }
+
+  addListener(listenerFn: Listener) {
+    this.listeners.push(listenerFn);
+  }
+
+  addProject(title: string, description: string, people: number) {
+    const newProject = new Project(
+      Math.random().toString(),
+      title,
+      description,
+      people,
+      ProjectStatus.Active
+    );
+
+    this.projects.push(newProject);
+    for (const listener of this.listeners) {
+      listener(this.projects.slice()); // this doesn't allowing editing
+    }
+  }
+}
+
+const projectState = ProjectState.getInstance();
+// only one state management class
+
 // autobind decorator
 function Autobind(_: any, _2: string, descriptor: PropertyDescriptor) {
   const originalMethod = descriptor.value;
@@ -14,7 +73,7 @@ function Autobind(_: any, _2: string, descriptor: PropertyDescriptor) {
 
 // Validation
 interface Validatable {
-  value: string | number;
+  value?: string | number;
   required?: boolean;
   minLength?: number;
   maxLength?: number;
@@ -151,7 +210,7 @@ class ProjectInput {
     const userInputs = this.gatherUserInput();
     if (Array.isArray(userInputs)) {
       const [title, desc, people] = userInputs;
-      console.log(title, desc, people);
+      projectState.addProject(title, desc, people);
     }
   }
 
@@ -164,4 +223,66 @@ class ProjectInput {
   }
 }
 
+// Project List class
+
+class ProjectList {
+  templateElement: HTMLTemplateElement;
+  hostElement: HTMLDivElement;
+  element: HTMLElement;
+  assignedProjects: Project[];
+
+  constructor(private typeProject: "active" | "finished") {
+    this.templateElement = document.getElementById(
+      "project-list"
+    )! as HTMLTemplateElement;
+    this.hostElement = document.getElementById("app")! as HTMLDivElement;
+    const importedNode = document.importNode(
+      this.templateElement.content,
+      true
+    );
+    this.element = importedNode.firstElementChild as HTMLTextAreaElement;
+    this.assignedProjects = [];
+    this.element.id = `${this.typeProject}-projects`;
+    projectState.addListener((projects: Project[]) => {
+      const relevantProjects = projects.filter((prj) => {
+        if (this.typeProject === "active") {
+          return prj.projectStatus === ProjectStatus.Active;
+        }
+        return prj.projectStatus === ProjectStatus.Finished;
+      });
+      this.assignedProjects = relevantProjects; //overwriting
+      this.renderProjects();
+    });
+    this.attach();
+    this.renderContent();
+  }
+
+  renderProjects() {
+    const listEl = document.getElementById(
+      `${this.typeProject}-projects-list`
+    )! as HTMLUListElement;
+    listEl.innerHTML = "";
+    for (let prj of this.assignedProjects) {
+      const listItem = document.createElement("li");
+      listItem.textContent = prj.t;
+      listEl!.appendChild(listItem);
+    }
+  }
+
+  private renderContent() {
+    const unorderListElement = this.element.querySelector(
+      "ul"
+    )! as HTMLUListElement;
+    unorderListElement.id = `${this.typeProject}-projects-list`;
+    this.element.querySelector("h2")!.textContent =
+      this.typeProject.toUpperCase() + " PROJECTS";
+  }
+
+  private attach() {
+    this.hostElement.insertAdjacentElement("beforeend", this.element);
+  }
+}
+
 const projectInstant = new ProjectInput();
+const projectsListActiveProjects = new ProjectList("active");
+const projectsListsFinishProjects = new ProjectList("finished");
