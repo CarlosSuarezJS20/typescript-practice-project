@@ -13,7 +13,8 @@ interface DragTarget {
 // project Type
 
 enum ProjectStatus {
-  Active,
+  NewTicket,
+  InProgress,
   Finished,
 }
 
@@ -27,12 +28,12 @@ class Project {
   ) {}
 }
 
-type Listener<T> = (items: Project[]) => void;
+type Listener<T> = (items: T[]) => void;
 
 // Project State Management class
 
 class State<T> {
-  protected listeners: Listener<T>[] = [];
+  protected listeners: Listener<T>[] = []; // ACCESS FROM OUTSITE BUT ONLY WHERE EXTENDS
 
   addListener(listenerFn: Listener<T>) {
     this.listeners.push(listenerFn);
@@ -75,7 +76,7 @@ class ProjectState extends State<Project> {
       title,
       description,
       people,
-      ProjectStatus.Active
+      ProjectStatus.NewTicket
     );
     this.projects.push(newProject);
     this.updateListeners();
@@ -83,7 +84,7 @@ class ProjectState extends State<Project> {
 
   private updateListeners() {
     for (const listener of this.listeners) {
-      listener(this.projects.slice()); // this doesn't allowing editing
+      listener(this.projects.slice()); // I'm passing a copy of the original projects property class
     }
   }
 }
@@ -205,10 +206,13 @@ class ProjectItem
 
   get peopleMessage() {
     if (this.projectObject.people === 1) {
-      return `1 person.`;
-    } else {
-      return `${this.projectObject.people} people `;
+      return `High Priority.`;
     }
+    if (this.projectObject.people === 2) {
+      return "Medium Priority";
+    }
+
+    return "Low Priority";
   }
 
   constructor(hostElId: string, project: Project) {
@@ -232,8 +236,7 @@ class ProjectItem
 
   renderContent() {
     this.element.querySelector("h2")!.textContent = this.projectObject.t;
-    this.element.querySelector("h3")!.textContent =
-      this.peopleMessage + "assigned";
+    this.element.querySelector("h3")!.textContent = this.peopleMessage;
     this.element.querySelector("p")!.textContent = this.projectObject.desc;
   }
 }
@@ -245,10 +248,9 @@ class ProjectList
   implements DragTarget {
   assignedProjects: Project[];
 
-  constructor(private typeProject: "active" | "finished") {
+  constructor(private typeProject: "new-ticket" | "in-Progress" | "finished") {
     super("project-list", "app", false, `${typeProject}-projects`);
     this.assignedProjects = [];
-
     this.configure();
     this.renderContent();
   }
@@ -267,8 +269,10 @@ class ProjectList
     const prjId = event.dataTransfer!.getData("text/plain");
     projectState.switchProjectStatus(
       prjId,
-      this.typeProject === "active"
-        ? ProjectStatus.Active
+      this.typeProject === "new-ticket"
+        ? ProjectStatus.NewTicket
+        : this.typeProject === "in-Progress"
+        ? ProjectStatus.InProgress
         : ProjectStatus.Finished
     );
   }
@@ -285,8 +289,11 @@ class ProjectList
     this.element.addEventListener("dragleave", this.dragLeaveHandler);
     projectState.addListener((projects: Project[]) => {
       const relevantProjects = projects.filter((prj) => {
-        if (this.typeProject === "active") {
-          return prj.projectStatus === ProjectStatus.Active;
+        if (this.typeProject === "new-ticket") {
+          return prj.projectStatus === ProjectStatus.NewTicket;
+        }
+        if (this.typeProject === "in-Progress") {
+          return prj.projectStatus === ProjectStatus.InProgress;
         }
         return prj.projectStatus === ProjectStatus.Finished;
       });
@@ -301,14 +308,14 @@ class ProjectList
     )! as HTMLUListElement;
     unorderListElement.id = `${this.typeProject}-projects-list`;
     this.element.querySelector("h2")!.textContent =
-      this.typeProject.toUpperCase() + " PROJECTS";
+      this.typeProject.toUpperCase() + " PINTEREST";
   }
 
   private renderProjects() {
     const listEl = document.getElementById(
       `${this.typeProject}-projects-list`
     )! as HTMLUListElement;
-    listEl.innerHTML = "";
+    listEl.innerHTML = ""; //cleans the UI from previous elements so theere is not duplicates
     for (let prj of this.assignedProjects) {
       new ProjectItem(this.element.querySelector("ul")!.id, prj);
     }
@@ -351,13 +358,13 @@ class ProjectInput extends ComponentBase<HTMLDivElement, HTMLFormElement> {
       value: titleElValue,
       required: true,
       minLength: undefined,
-      maxLength: 20,
+      maxLength: 50,
     };
 
     const descriptionValidatable: Validatable = {
       value: descriptionTextAreaElValue,
       required: true,
-      minLength: 10,
+      minLength: 5,
       maxLength: 50,
     };
 
@@ -365,7 +372,7 @@ class ProjectInput extends ComponentBase<HTMLDivElement, HTMLFormElement> {
       value: +peopleInputValue,
       required: true,
       min: 1,
-      max: 5,
+      max: 3,
     };
 
     if (
@@ -405,5 +412,6 @@ class ProjectInput extends ComponentBase<HTMLDivElement, HTMLFormElement> {
 }
 
 const projectInstant = new ProjectInput();
-const projectsListActiveProjects = new ProjectList("active");
+const projectsListActiveProjects = new ProjectList("new-ticket");
+const projectsListsInProgressProjects = new ProjectList("in-Progress");
 const projectsListsFinishProjects = new ProjectList("finished");
