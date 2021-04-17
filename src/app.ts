@@ -1,3 +1,15 @@
+// Drag and Drop interface
+interface Draggable {
+  dragStartHandler(event: DragEvent): void;
+  dragEndHandler(event: DragEvent): void;
+}
+
+interface DragTarget {
+  dragOverHandler(event: DragEvent): void;
+  dropHandler(event: DragEvent): void;
+  dragLeaveHandler(event: DragEvent): void;
+}
+
 // project Type
 
 enum ProjectStatus {
@@ -15,7 +27,7 @@ class Project {
   ) {}
 }
 
-type Listener<T> = (items: Project[]) => void; // no matter what returns
+type Listener<T> = (items: Project[]) => void;
 
 // Project State Management class
 
@@ -43,6 +55,20 @@ class ProjectState extends State<Project> {
     return this.instance;
   }
 
+  switchProjectStatus(projectId: string, newStatus: ProjectStatus) {
+    const projectToSwitchStatus = this.projects.find(
+      (prj) => prj.id === projectId
+    );
+    if (
+      projectToSwitchStatus &&
+      projectToSwitchStatus.projectStatus !== newStatus
+    ) {
+      projectToSwitchStatus.projectStatus = newStatus;
+
+      this.updateListeners();
+    }
+  }
+
   addProject(title: string, description: string, people: number) {
     const newProject = new Project(
       Math.random().toString(),
@@ -51,8 +77,11 @@ class ProjectState extends State<Project> {
       people,
       ProjectStatus.Active
     );
-
     this.projects.push(newProject);
+    this.updateListeners();
+  }
+
+  private updateListeners() {
     for (const listener of this.listeners) {
       listener(this.projects.slice()); // this doesn't allowing editing
     }
@@ -63,7 +92,7 @@ const projectState = ProjectState.getInstance();
 // only one state management class
 
 // autobind decorator
-function Autobind(_: any, _2: string, descriptor: PropertyDescriptor) {
+function autobind(_: any, _2: string, descriptor: PropertyDescriptor) {
   const originalMethod = descriptor.value;
   const adjustedDescriptor: PropertyDescriptor = {
     configurable: true,
@@ -126,6 +155,7 @@ function validateInputs(validatableInput: Validatable): boolean {
 
 //Component base class
 
+//abstract class does not allowed the class to be instantiated
 abstract class ComponentBase<T extends HTMLElement, U extends HTMLElement> {
   templateElement: HTMLTemplateElement;
   hostElement: T;
@@ -135,7 +165,7 @@ abstract class ComponentBase<T extends HTMLElement, U extends HTMLElement> {
     templateId: string,
     hostElementId: string,
     insertAtStart: boolean,
-    newElementId?: string
+    newElementId?: string //same thing that doing string | undefined
   ) {
     this.templateElement = document.getElementById(
       templateId
@@ -159,13 +189,18 @@ abstract class ComponentBase<T extends HTMLElement, U extends HTMLElement> {
     );
   }
 
+  // ==== This requires every class that inherites from this one to have the methods
+  // Private abstracts is not allowed
+
   abstract configure(): void;
   abstract renderContent(): void;
 }
 
 //ProjectItem Class
 
-class projectItem extends ComponentBase<HTMLUListElement, HTMLLIElement> {
+class ProjectItem
+  extends ComponentBase<HTMLUListElement, HTMLLIElement>
+  implements Draggable {
   projectObject: Project;
 
   get peopleMessage() {
@@ -179,10 +214,22 @@ class projectItem extends ComponentBase<HTMLUListElement, HTMLLIElement> {
   constructor(hostElId: string, project: Project) {
     super("single-project", hostElId, false, project.id);
     this.projectObject = project;
+    this.configure();
     this.renderContent();
   }
 
-  configure() {}
+  @autobind
+  dragStartHandler(event: DragEvent) {
+    event.dataTransfer!.setData("text/plain", this.projectObject.id);
+    event.dataTransfer!.effectAllowed = "move";
+  }
+  dragEndHandler(_: DragEvent) {}
+
+  configure() {
+    this.element.addEventListener("dragstart", this.dragStartHandler);
+    this.element.addEventListener("dragend", this.dragEndHandler);
+  }
+
   renderContent() {
     this.element.querySelector("h2")!.textContent = this.projectObject.t;
     this.element.querySelector("h3")!.textContent =
@@ -193,7 +240,9 @@ class projectItem extends ComponentBase<HTMLUListElement, HTMLLIElement> {
 
 // Project List class
 
-class ProjectList extends ComponentBase<HTMLDivElement, HTMLElement> {
+class ProjectList
+  extends ComponentBase<HTMLDivElement, HTMLElement>
+  implements DragTarget {
   assignedProjects: Project[];
 
   constructor(private typeProject: "active" | "finished") {
@@ -204,7 +253,36 @@ class ProjectList extends ComponentBase<HTMLDivElement, HTMLElement> {
     this.renderContent();
   }
 
+  @autobind
+  dragOverHandler(event: DragEvent) {
+    if (event.dataTransfer && event.dataTransfer.types[0] === "text/plain") {
+      event.preventDefault();
+      const listEl = this.element.querySelector("ul")!;
+      listEl.classList.add("droppable");
+    }
+  }
+
+  @autobind
+  dropHandler(event: DragEvent) {
+    const prjId = event.dataTransfer!.getData("text/plain");
+    projectState.switchProjectStatus(
+      prjId,
+      this.typeProject === "active"
+        ? ProjectStatus.Active
+        : ProjectStatus.Finished
+    );
+  }
+
+  @autobind
+  dragLeaveHandler(_: DragEvent) {
+    const listEl = this.element.querySelector("ul")!;
+    listEl.classList.remove("droppable");
+  }
+
   configure() {
+    this.element.addEventListener("dragover", this.dragOverHandler);
+    this.element.addEventListener("drop", this.dropHandler);
+    this.element.addEventListener("dragleave", this.dragLeaveHandler);
     projectState.addListener((projects: Project[]) => {
       const relevantProjects = projects.filter((prj) => {
         if (this.typeProject === "active") {
@@ -232,7 +310,7 @@ class ProjectList extends ComponentBase<HTMLDivElement, HTMLElement> {
     )! as HTMLUListElement;
     listEl.innerHTML = "";
     for (let prj of this.assignedProjects) {
-      new projectItem(this.element.querySelector("ul")!.id, prj);
+      new ProjectItem(this.element.querySelector("ul")!.id, prj);
     }
   }
 }
@@ -315,7 +393,7 @@ class ProjectInput extends ComponentBase<HTMLDivElement, HTMLFormElement> {
     }
   }
 
-  @Autobind
+  @autobind
   private submitHandler(event: Event) {
     event.preventDefault();
     const userInputs = this.gatherUserInput();
